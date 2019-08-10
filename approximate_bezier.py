@@ -26,6 +26,12 @@ def control_point(current, previous, nxt, reverse=False, smoothing = 0.1):
     n = nxt
     if p is None: p = current
     if n is None: n = current
+
+    if reverse:
+        current_magnitude, _ = line_to_magnitude_angle(p, current)
+    else:
+        current_magnitude, _ = line_to_magnitude_angle(current, n)
+    
     # Properties of the opposed-line
     magnitude, angle = line_to_magnitude_angle(p, n)
     # If is end-control-point, add PI to the angle to go backward
