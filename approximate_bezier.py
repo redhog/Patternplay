@@ -54,5 +54,5 @@ def bezier_segment(i, a, smoothing):
 def approximate_bezier(points, smoothing=0.1):
     return parse_path(
         ("M %s,%s " % (points[0].real, points[0].imag))
-        + " ".join(bezier_segment(i, points, smoothing=.5)
+        + " ".join(bezier_segment(i, points, smoothing)
                    for i in range(1, len(points)-1)))
