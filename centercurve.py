@@ -28,7 +28,7 @@ def slices(segments):
 
     normals = [Line(s.point(i)-s.normal(i)*1e-15, s.point(i)+size*s.normal(i))
                for s in segments
-               for i in linspace(1e-20, 1-1e-16, 3)]
+               for i in (1e-20, .5)]
 
     # Normals are not defined at t = 0 and t=1!!! Hack around...
     intersections = [(collapse_close_intersections(segments.intersect(normal)), normal) for normal in normals]
