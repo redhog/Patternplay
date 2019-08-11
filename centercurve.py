@@ -2,6 +2,21 @@ import math
 from svgpathtools import *
 from numpy import *
 
+def _intersectionsort(i):
+    ((T1, seg1, t1), (T2, seg2, t2)) = i
+    return T2
+def sort_intersections(intersections):
+    return sorted(intersections, key=_intersectionsort)
+
+def collapse_close_intersections(intersections):
+    intersections = sort_intersections(intersections)
+    out = []
+    for i in range(0, len(intersections)):
+        if out and misctools.isclose(out[-1][1][0], intersections[i][1][0]):
+            continue
+        out.append(intersections[i])
+    return out
+
 def slices(segments):
     """Returns list of slices through a path. Each slice is defined by two points on the path, where a line connects.
        Returns list of intersectionpairs:
@@ -11,18 +26,16 @@ def slices(segments):
     b = segments.bbox()
     size = math.sqrt((b[1]-b[0])**2+(b[3]-b[2])**2)
 
-    normals = [Line(s.point(i)+size*s.normal(i), s.point(i)-size*s.normal(i))
+    normals = [Line(s.point(i)-s.normal(i)*1e-15, s.point(i)+size*s.normal(i))
                for s in segments
                for i in linspace(1e-20, 1-1e-16, 3)]
 
     # Normals are not defined at t = 0 and t=1!!! Hack around...
-    def intersectionsort(i):
-        ((T1, seg1, t1), (T2, seg2, t2)) = i
-        return T2
-    intersections = [sorted(segments.intersect(normal), key=intersectionsort) for normal in normals]
-    groupedintersectionpairs = [[(intersectionline[i*2], intersectionline[i*2+1])
-                                 for i in range(len(intersectionline)//2)]
-                                for intersectionline in intersections]
+    intersections = [(collapse_close_intersections(segments.intersect(normal)), normal) for normal in normals]
+    groupedintersectionpairs = [[(intersectionline[0], intersectionline[1], normal)]
+                                for intersectionline, normal in intersections
+                                if len(intersectionline) >= 2]    
+    
     return [intersectionpair
             for group in groupedintersectionpairs
             for intersectionpair in group]
