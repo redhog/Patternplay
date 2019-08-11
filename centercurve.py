@@ -1,6 +1,7 @@
 import math
 from svgpathtools import *
 from numpy import *
+import approximate_bezier
 
 def _intersectionsort(i):
     ((T1, seg1, t1), (T2, seg2, t2)) = i
@@ -69,5 +70,66 @@ def centerpoints(segments):
 
     b = segments.bbox()
 
-    return [(d, i, p) for (d, i, p) in centerpoints
-            if path.path_encloses_pt(p, b[0]+1j*b[2]-1-1j, full)]
+    filtered = []
+    for entry in sorted(centerpoints, key=lambda entry: entry[2].real):
+        if not path.path_encloses_pt(entry[2], b[0]+1j*b[2]-1-1j, full):
+            continue
+        if filtered and misctools.isclose(filtered[-1][2], entry[2]):
+            continue
+        filtered.append(entry)
+    return filtered
+
+def ordered_centerpoints(segments):
+    points = centerpoints(segments)
+
+    dmean = array([d for d, i, p in points]).mean()
+    dstd = array([d for d, i, p in points]).std()
+
+    orderedcenterpoints = sorted(
+        [(i[0][0][0], d, i, p) for d, i, p in points]
+        + [(i[1][0][0], d, i, p) for d, i, p in points],
+        key = lambda a: a[0])
+
+    clusters = []
+    cluster = []
+    for T, d, i, p in orderedcenterpoints:
+        if d > dmean - dstd:
+            if cluster:
+                clusters.append(cluster)
+                cluster = []
+        else:
+            cluster.append((T, d, i, p))
+    if cluster:
+        clusters.append(cluster)
+        cluster = []
+
+    clusters = sorted([array([T for T, d, i, p in cluster]).mean() for cluster in clusters])
+    first = clusters[0]
+    last = clusters[1]
+    if last - first < .5:
+        first, last = last, first
+
+    if first < last:
+        orderedcenterpointsnocopies = [(L, d, i, p) for (L, d, i, p) in orderedcenterpoints
+                                       if L >= first and L <=last]
+    else:
+        orderedcenterpointsnocopies = ([(L, d, i, p)
+                                        for (L, d, i, p) in orderedcenterpoints
+                                        if L >= first] +
+                                       [(L, d, i, p)
+                                        for (L, d, i, p) in orderedcenterpoints
+                                        if L <= last])
+    return orderedcenterpointsnocopies
+
+
+def centerline(segments):
+    orderedcenterpointsnocopies = ordered_centerpoints(segments)
+    return Path(*(Line(orderedcenterpointsnocopies[i][3], orderedcenterpointsnocopies[i-1][3])
+                  for i in range(1, len(orderedcenterpointsnocopies))))
+
+def centercurve(segments, smoothing=0.3):
+    orderedcenterpointsnocopies = ordered_centerpoints(segments)
+
+    points = [p[3] for p in orderedcenterpointsnocopies]
+
+    return approximate_bezier.approximate_bezier(points, smoothing=smoothing)
