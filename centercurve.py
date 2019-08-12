@@ -1,7 +1,7 @@
 import math
 from svgpathtools import *
 from numpy import *
-import approximate_bezier
+import PathFitter
 
 def _intersectionsort(i):
     ((T1, seg1, t1), (T2, seg2, t2)) = i
@@ -54,9 +54,10 @@ def centerline(P, resolution=10):
     return res
 
 
-def centercurve(P, resolution=10, smoothing=0.3):
+def centercurve(P, resolution=10, error=2.5):
     return [
-        approximate_bezier.approximate_bezier(
-            [l[0].start] + [s.end for s in l],
-            smoothing=smoothing)
+        parse_path(PathFitter.fitpathsvg(
+            [(p.real, p.imag)
+             for p in [l[0].start] + [s.end for s in l]],
+            error))
         for l in centerline(P, resolution)]
