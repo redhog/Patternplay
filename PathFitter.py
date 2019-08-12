@@ -344,7 +344,7 @@ class PathFitter:
     # using relative distances between points.
     def chordLengthParameterize(self, first, last):
         u = {0: 0}
-        print(first, last)
+        #print(first, last)
         for i in range(first + 1, last + 1):
             u[i - first] = u[i - first - 1] + \
                 self.points[i].getDistance(self.points[i - 1])
