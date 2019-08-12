@@ -18,118 +18,38 @@ def collapse_close_intersections(intersections):
         out.append(intersections[i])
     return out
 
-def slices(segments):
-    """Returns list of slices through a path. Each slice is defined by two points on the path, where a line connects.
-       Returns list of intersectionpairs:
-       (((Tpath1, segpath1, tpath1), (Tline1, segline1, tline1)),
-        ((Tpath2, segpath2, tpath2), (Tline2, segline2, tline2)))
-    """
-    b = segments.bbox()
-    size = math.sqrt((b[1]-b[0])**2+(b[3]-b[2])**2)
-
-    normals = [Line(s.point(i)-s.normal(i)*1e-15, s.point(i)+size*s.normal(i))
-               for s in segments
-               for i in (1e-20, .5)]
-
-    # Normals are not defined at t = 0 and t=1!!! Hack around...
-    intersections = [(collapse_close_intersections(segments.intersect(normal)), normal) for normal in normals]
-    groupedintersectionpairs = [[(intersectionline[0], intersectionline[1], normal)]
-                                for intersectionline, normal in intersections
-                                if len(intersectionline) >= 2]    
-    
-    return [intersectionpair
-            for group in groupedintersectionpairs
-            for intersectionpair in group]
-
-def centerpoints(segments):
-
-    """Calculates a list of center points inside a shape as well as a
-       likeliehood for each point of being at the end of the shape (a
-       corner). Returns list of:
-       (distance, intersectionpair, centerpoint_coord)
-       where distance is in ]0,1[, and close to 0 means corner
-    """
-    intersectionpairs = slices(segments)
-    
-    def distance(a, b):
-        return math.sqrt((sin(a*2*pi) - sin(b*2*pi))**2 + (cos(a*2*pi) - cos(b*2*pi))**2)/2
-
-    intersectionpairswithdistance = sorted([(distance(intersectionpair[0][0][0], intersectionpair[1][0][0]), intersectionpair)
-                                            for intersectionpair in intersectionpairs],
-                                           key=lambda p: p[0])
-
-    centerpoints = [(distance,
-                     intersectionpair,
-                     (segments.point(intersectionpair[0][0][0])
-                      + segments.point(intersectionpair[1][0][0])) / 2)
-                    for distance, intersectionpair in intersectionpairswithdistance]
-
-    full = Path(*segments)
-    if not full.isclosed():
-        full.append(Line(full.end, full.start))
-
-    b = segments.bbox()
-
-    filtered = []
-    for entry in sorted(centerpoints, key=lambda entry: entry[2].real):
-        if not path.path_encloses_pt(entry[2], b[0]+1j*b[2]-1-1j, full):
+def centerline(P, resolution=10):
+    lines = []
+    res = []
+    respath = []
+    respoint = None
+    for T in linspace(0, 1, len(P) * resolution):
+        p = P.point(T)
+        n = P.normal(T)
+        l = Line(p - n * 1e-10, p + n*200)
+        lines.append(l)
+        intersections = collapse_close_intersections(P.intersect(l))
+        if len(intersections) < 2:
             continue
-        if filtered and misctools.isclose(filtered[-1][2], entry[2]):
+        ((T1, seg1, t1), (T2, seg2, t2)) = intersections[1]
+        if T1 < T:
+            respoint = None
+            if respath:
+                res.append(Path(*respath))
+            respath = []
             continue
-        filtered.append(entry)
-    return filtered
-
-def ordered_centerpoints(segments):
-    points = centerpoints(segments)
-
-    dmean = array([d for d, i, p in points]).mean()
-    dstd = array([d for d, i, p in points]).std()
-
-    orderedcenterpoints = sorted(
-        [(i[0][0][0], d, i, p) for d, i, p in points]
-        + [(i[1][0][0], d, i, p) for d, i, p in points],
-        key = lambda a: a[0])
-
-    clusters = []
-    cluster = []
-    for T, d, i, p in orderedcenterpoints:
-        if d > dmean - dstd:
-            if cluster:
-                clusters.append(cluster)
-                cluster = []
-        else:
-            cluster.append((T, d, i, p))
-    if cluster:
-        clusters.append(cluster)
-        cluster = []
-
-    clusters = sorted([array([T for T, d, i, p in cluster]).mean() for cluster in clusters])
-    first = clusters[0]
-    last = clusters[1]
-    if last - first < .5:
-        first, last = last, first
-
-    if first < last:
-        orderedcenterpointsnocopies = [(L, d, i, p) for (L, d, i, p) in orderedcenterpoints
-                                       if L >= first and L <=last]
-    else:
-        orderedcenterpointsnocopies = ([(L, d, i, p)
-                                        for (L, d, i, p) in orderedcenterpoints
-                                        if L >= first] +
-                                       [(L, d, i, p)
-                                        for (L, d, i, p) in orderedcenterpoints
-                                        if L <= last])
-    return orderedcenterpointsnocopies
+        centerp = (p + P.point(T1)) / 2
+        if respoint is not None:
+            respath.append(Line(respoint, centerp))
+        respoint = centerp
+    if respath:
+        res.append(Path(*respath))
+    return res
 
 
-def centerline(segments):
-    orderedcenterpointsnocopies = ordered_centerpoints(segments)
-    return Path(*(Line(orderedcenterpointsnocopies[i][3], orderedcenterpointsnocopies[i-1][3])
-                  for i in range(1, len(orderedcenterpointsnocopies))))
-
-def centercurve(segments, smoothing=0.3):
-    orderedcenterpointsnocopies = ordered_centerpoints(segments)
-
-    points = [p[3] for p in orderedcenterpointsnocopies]
-
-    return approximate_bezier.approximate_bezier(points, smoothing=smoothing)
+def centercurve(P, resolution=10, smoothing=0.3):
+    return [
+        approximate_bezier.approximate_bezier(
+            [l[0].start] + [s.end for s in l],
+            smoothing=smoothing)
+        for l in centerline(P, resolution)]
