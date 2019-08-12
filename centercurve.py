@@ -40,7 +40,14 @@ def centerline(P, resolution=10):
             continue
         centerp = (p + P.point(T1)) / 2
         if respoint is not None:
-            respath.append(Line(respoint, centerp))
+            s = Line(respoint, centerp)
+            if P.intersect(s):
+                respoint = None
+                if respath:
+                    res.append(Path(*respath))
+                respath = []
+                continue
+            respath.append(s)
         respoint = centerp
     if respath:
         res.append(Path(*respath))
